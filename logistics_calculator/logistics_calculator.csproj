@@ -8,4 +8,8 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="ExcelDataReader" Version="3.8.0" />
+  </ItemGroup>
+
 </Project>
