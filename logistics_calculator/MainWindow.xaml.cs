@@ -1,4 +1,5 @@
 ﻿using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Spreadsheet;
 using ExcelDataReader;
 using Microsoft.Win32;
 using System.IO;
@@ -16,28 +17,26 @@ using System.Windows.Shapes;
 // (TODO) Might not need `bool abort` variable
 
 namespace logistics_calculator
-{   
-    using WeightMap = List<double>;
-    using HAWB_Map = System.Collections.Generic.Dictionary<int, List<double>>;
-    using QuesRegionMap = System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<int, List<double>>>;
-
+{
+    using WeightMap = System.Collections.Generic.Dictionary<double, double?>;
+    using HAWB_Map = System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<double, double?>>;
+    using QuesRegionMap = System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<double, double?>>>;
+    
     using WeightRangeMap = System.Collections.Generic.Dictionary<Weight, double>;
     using ServiceLevelMap = System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<Weight, double>>;
     using RegionMap = System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<Weight, double>>>;
-    
-    
 
-    
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window
     {
-        private Dictionary<string, int> ref_header_map = new Dictionary<string, int>();
+        private Dictionary<string, string> alias_map = new Dictionary<string, string>();
+
         private RegionMap ref_region_map = new RegionMap();
+        private Dictionary<string, int> ref_header_map = new Dictionary<string, int>();
         private string target_service_level = "PRIORITY OVERNIGHT OR INTERNATIONAL PRIORITY";
 
-        private Dictionary<string, string> alias_map = new Dictionary<string, string>();
         private QuesRegionMap ques_region_map = new QuesRegionMap();
         private Dictionary<string, int> ques_header_map = new Dictionary<string, int>();
 
@@ -286,9 +285,9 @@ namespace logistics_calculator
                 {
                     ques_region_map[ship_to_id].Add(hawb, new WeightMap());
                 }
-                if (ques_region_map[ship_to_id][hawb].Contains(weight) == false)
+                if (ques_region_map[ship_to_id][hawb].ContainsKey(weight) == false)
                 {
-                    ques_region_map[ship_to_id][hawb].Add(weight);
+                    ques_region_map[ship_to_id][hawb].Add(weight, null);
                 }
                 #endregion
             }
@@ -328,12 +327,20 @@ namespace logistics_calculator
 
         private void Start(object sender, RoutedEventArgs e)
         {         
-            if (outputFolderPath == null || outputFileTextBox.Text == null)
+            if (outputFolderPath == null || outputFile1TextBox.Text == null)
             {
                 // sad path
                 return;
             }
 
+            StartPart1();
+            StartPart2();
+
+        }
+
+        private void StartPart1()
+        {
+            #region ques1
             // Initialize excel file
             var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Sheet1");
@@ -347,12 +354,105 @@ namespace logistics_calculator
                 ++col;
             }
             worksheet.Cell(row, col).Value = "Cost";
+            ++col;
+            worksheet.Cell(row, col).Value = "Compounded cost";
             ++row;
             col = 1;
 
             // get individual cost
             foreach (var dest_hawb_pair in ques_region_map)
-            {                
+            {
+                string ship_to_id = dest_hawb_pair.Key;
+                HAWB_Map hawb_map = dest_hawb_pair.Value;
+
+                string region;
+                if (alias_map.ContainsKey(ship_to_id))
+                {
+                    region = alias_map[ship_to_id];
+                }
+                else
+                {
+                    // sad path
+                    break;
+                }
+
+                foreach (var hawb_weight_pair in hawb_map)
+                {
+                    int hawb = hawb_weight_pair.Key;
+                    WeightMap weight_map = hawb_weight_pair.Value;
+                    double cost_sum = 0;
+
+                    List<double> weights = weight_map.Keys.ToList();
+                    for (int i = 0; i < weights.Count; ++i)
+                    {
+                        double weight = weights[i];
+
+                        // Search weight range, continue to process once found
+                        WeightRangeMap weight_range_map = ref_region_map[region][target_service_level];
+                        foreach (KeyValuePair<Weight, double> weight_rate_pair in weight_range_map)
+                        {
+                            double min_weight = weight_rate_pair.Key.MinWeight;
+                            double max_weight = weight_rate_pair.Key.MaxWeight;
+                            double rate = weight_rate_pair.Value;
+
+                            if ((weight >= min_weight) && (weight <= max_weight))
+                            {
+                                double cost = rate * weight;
+
+                                weight_map[weight] = cost;
+                                cost_sum += cost;
+
+                                worksheet.Cell(row, col).Value = ship_to_id;
+                                ++col;
+                                worksheet.Cell(row, col).Value = hawb;
+                                ++col;
+                                worksheet.Cell(row, col).Value = weight;
+                                ++col;
+                                worksheet.Cell(row, col).Value = cost;
+                                ++col;
+                                worksheet.Cell(row, col).Value = cost_sum;
+
+                                ++row;
+                                col = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Write excel file to disk
+            string fullPath = System.IO.Path.Combine(outputFolderPath, outputFile1TextBox.Text);
+            workbook.SaveAs($"{fullPath}.xlsx");
+
+            workbook.Dispose();
+            #endregion
+        }
+
+        private void StartPart2()
+        {
+            // Initialize excel file
+            var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Sheet1");
+
+            // Add header to sheet
+            int row = 1;
+            int col = 1;
+
+            worksheet.Cell(row, col).Value = "Ship-ToID";
+            ++col;
+            worksheet.Cell(row, col).Value = "HAWB/BOL";
+            ++col;
+            worksheet.Cell(row, col).Value = "Total weight";
+            ++col;
+            worksheet.Cell(row, col).Value = "Total cost (no consolidation)";
+            ++col;
+            worksheet.Cell(row, col).Value = "Total cost (consolidation)";
+            ++row;
+            col = 1;
+
+            foreach (var dest_hawb_pair in ques_region_map)
+            {
                 string ship_to_id = dest_hawb_pair.Key;
                 HAWB_Map hawb_map = dest_hawb_pair.Value;
 
@@ -372,38 +472,45 @@ namespace logistics_calculator
                     int hawb = hawb_weight_pair.Key;
                     WeightMap weight_map = hawb_weight_pair.Value;
 
-                    foreach (double weight in weight_map)
+                    double? weight_sum = 0;
+                    double? cost_sum = 0;
+                    foreach (var weight_cost_pair in weight_map)
                     {
-                        WeightRangeMap weight_range_map = ref_region_map[region][target_service_level];
-                        foreach (KeyValuePair<Weight, double> weight_rate_pair in weight_range_map)
+                        weight_sum += weight_cost_pair.Key;
+                        cost_sum += weight_cost_pair.Value;
+                    }
+
+                    WeightRangeMap weight_range_map = ref_region_map[region][target_service_level];
+                    foreach (KeyValuePair<Weight, double> weight_rate_pair in weight_range_map)
+                    {
+                        double min_weight = weight_rate_pair.Key.MinWeight;
+                        double max_weight = weight_rate_pair.Key.MaxWeight;
+                        double rate = weight_rate_pair.Value;
+
+                        if ((weight_sum >= min_weight) && (weight_sum <= max_weight))
                         {
-                            double min_weight = weight_rate_pair.Key.MinWeight;
-                            double max_weight = weight_rate_pair.Key.MaxWeight;
-                            double rate = weight_rate_pair.Value;
+                            double? cost_consolidated = rate * weight_sum;
 
-                            if ((weight >= min_weight) && (weight <= max_weight))
-                            {                                                                
-                                double cost = rate * weight;
+                            worksheet.Cell(row, col).Value = ship_to_id;
+                            ++col;
+                            worksheet.Cell(row, col).Value = hawb;
+                            ++col;
+                            worksheet.Cell(row, col).Value = weight_sum;
+                            ++col;
+                            worksheet.Cell(row, col).Value = cost_sum;
+                            ++col;
+                            worksheet.Cell(row, col).Value = cost_consolidated;
 
-                                worksheet.Cell(row, col).Value = ship_to_id;
-                                ++col;
-                                worksheet.Cell(row, col).Value = hawb;
-                                ++col;
-                                worksheet.Cell(row, col).Value = weight;
-                                ++col;
-                                worksheet.Cell(row, col).Value = cost;
-
-                                ++row;
-                                col = 1;
-                                break;
-                            }
+                            ++row;
+                            col = 1;
+                            break;
                         }
                     }
                 }
             }
 
             // Write excel file to disk
-            string fullPath = System.IO.Path.Combine(outputFolderPath, outputFileTextBox.Text);
+            string fullPath = System.IO.Path.Combine(outputFolderPath, outputFile2TextBox.Text);
             workbook.SaveAs($"{fullPath}.xlsx");
 
             workbook.Dispose();

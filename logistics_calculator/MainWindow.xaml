@@ -14,6 +14,7 @@
             <RowDefinition Height="Auto"></RowDefinition>
             <RowDefinition Height="Auto"></RowDefinition>
             <RowDefinition Height="Auto"></RowDefinition>
+            <RowDefinition Height="Auto"></RowDefinition>
         </Grid.RowDefinitions>
 
         <Grid Grid.Row="0">
@@ -89,17 +90,26 @@
                 <RowDefinition Height="Auto"></RowDefinition>
                 <RowDefinition Height="Auto"></RowDefinition>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Text="Output filename"></TextBlock>
-            <TextBox Grid.Row="1" x:Name="outputFileTextBox"></TextBox>
+            <TextBlock Grid.Row="0" Text="Output filename 1"></TextBlock>
+            <TextBox Grid.Row="1" x:Name="outputFile1TextBox"></TextBox>
         </Grid>
-        
+
         <Grid Grid.Row="5">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"></RowDefinition>
+                <RowDefinition Height="Auto"></RowDefinition>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Text="Output filename 2"></TextBlock>
+            <TextBox Grid.Row="1" x:Name="outputFile2TextBox"></TextBox>
+        </Grid>
+
+        <Grid Grid.Row="6">
             <Grid.RowDefinitions>
                 <RowDefinition></RowDefinition>
                 <RowDefinition></RowDefinition>
             </Grid.RowDefinitions>
 
-            <Button Grid.Column="0" Content="Start" ></Button>
+            <Button Grid.Column="0" Content="Start" Click="Start"></Button>
             
         </Grid>
     </Grid>
